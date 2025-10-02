@@ -10,6 +10,7 @@ from pathlib import Path
 # ------------------------------
 chirps_folder = Path("chirps_data")
 shapefile_path = Path("ph_polygon/gadm41_PHL_3.shp")
+discharge_path = Path("csv/flood_data_results.csv")
 
 # ------------------------------
 # 2. Load CHIRPS NetCDF files
@@ -33,12 +34,11 @@ print("Shapefile columns:", gdf.columns)
 # ------------------------------
 angeles_bgy = gdf[gdf["NAME_2"] == "Angeles City"].copy()
 
-# Check which barangays were found
 print("\n📌 Barangays found in shapefile:")
 print(angeles_bgy["NAME_3"].value_counts())
 print(f"Total barangays found: {len(angeles_bgy)}\n")
 
-# Optional: buffer small polygons to avoid NoDataInBounds
+# Buffer to avoid geometry errors
 angeles_bgy["geometry"] = angeles_bgy.geometry.buffer(0.001)
 
 # ------------------------------
@@ -67,21 +67,66 @@ for idx, (_, row) in enumerate(angeles_bgy.iterrows(), start=1):
 print(f"🎯 Completed processing {len(results)}/{total} barangays.\n")
 
 # ------------------------------
-# 6. Combine all barangay data and save
+# 6. Combine results
 # ------------------------------
-if results:
-    df_all = pd.concat(results, ignore_index=True)
-    df_all.to_csv("angeles_barangay_daily_rainfall.csv", index=False)
-    print("✅ Saved barangay-level daily rainfall to 'angeles_barangay_daily_rainfall.csv'")
-else:
-    print("❌ No data processed. CSV not created.")
+df_all = pd.concat(results, ignore_index=True)
+
+# Make sure time is datetime (and timezone-naive)
+df_all["time"] = pd.to_datetime(df_all["time"]).dt.tz_localize(None)
 
 # ------------------------------
-# 7. Quick plot for one barangay
+# 7. Load river discharge data
+# ------------------------------
+discharge_df = pd.read_csv(discharge_path, parse_dates=["date"])
+discharge_df = discharge_df.rename(columns={"date": "time"})
+discharge_df["time"] = pd.to_datetime(discharge_df["time"]).dt.tz_localize(None)
+
+# ------------------------------
+# 8. Merge rainfall with discharge
+# ------------------------------
+merged = pd.merge(df_all, discharge_df[["time", "river_discharge"]],
+                  on="time", how="left")
+
+# ------------------------------
+# 9. Add rainfall lag/rolling features
+# ------------------------------
+merged = merged.sort_values(["barangay", "time"])
+
+# Group by barangay so lags are per-location
+merged["precip_lag1"] = merged.groupby("barangay")["precip"].shift(1)
+merged["precip_lag2"] = merged.groupby("barangay")["precip"].shift(2)
+merged["precip_3d_sum"] = merged.groupby("barangay")["precip"].rolling(3, min_periods=1).sum().reset_index(level=0, drop=True)
+merged["precip_7d_sum"] = merged.groupby("barangay")["precip"].rolling(7, min_periods=1).sum().reset_index(level=0, drop=True)
+
+# Add temporal features
+merged["month"] = merged["time"].dt.month
+merged["day_of_year"] = merged["time"].dt.dayofyear
+merged["weekday"] = merged["time"].dt.weekday
+
+# ------------------------------
+# 10. Save merged dataset
+# ------------------------------
+merged.to_csv("angeles_barangay_rainfall_discharge.csv", index=False)
+print("✅ Saved merged dataset to 'angeles_barangay_rainfall_discharge.csv'")
+
+# ------------------------------
+# 11. Quick plot (rainfall + discharge)
 # ------------------------------
 bgy_to_plot = "Balibago"
-if results:
-    df_plot = df_all[df_all["barangay"] == bgy_to_plot]
-    df_plot.plot(x="time", y="precip", figsize=(12,5), title=f"Daily Rainfall - {bgy_to_plot}")
-    plt.ylabel("Rainfall (mm)")
-    plt.show()
+df_plot = merged[merged["barangay"] == bgy_to_plot]
+
+fig, ax1 = plt.subplots(figsize=(12,5))
+
+ax1.set_title(f"Rainfall & River Discharge - {bgy_to_plot}")
+ax1.set_xlabel("Date")
+ax1.set_ylabel("Rainfall (mm)", color="blue")
+ax1.plot(df_plot["time"], df_plot["precip"], color="blue", label="Rainfall")
+ax1.tick_params(axis="y", labelcolor="blue")
+
+ax2 = ax1.twinx()
+ax2.set_ylabel("River Discharge (m³/s)", color="green")
+ax2.plot(df_plot["time"], df_plot["river_discharge"], color="green", label="Discharge")
+ax2.tick_params(axis="y", labelcolor="green")
+
+fig.tight_layout()
+plt.show()

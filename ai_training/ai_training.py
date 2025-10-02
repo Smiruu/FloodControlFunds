@@ -1,22 +1,15 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
-import xgboost as xgb
-from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
-    accuracy_score,
-    roc_curve,
-    auc
-)
+from sklearn.cluster import KMeans
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
 import joblib
 
 # ------------------------------
 # 1. Load dataset
 # ------------------------------
-df = pd.read_csv("../dataset/csv/angeles_barangay_features_proxy.csv", parse_dates=["time"])
+df = pd.read_csv("../dataset/csv/angeles_barangay_rainfall_discharge.csv", parse_dates=["time"])
 
 # ------------------------------
 # 2. Features & preprocessing
@@ -27,102 +20,63 @@ df["weekday"] = df["time"].dt.weekday
 df.fillna(0, inplace=True)
 
 feature_cols = [
-    "precip", "precip_3d_sum", "precip_7d_sum",
+    "precip", "river_discharge",
     "precip_lag1", "precip_lag2",
-    "month", "day_of_year", "weekday",
-    "is_flood_prone"
+    "precip_3d_sum", "precip_7d_sum",
+    "month", "day_of_year", "weekday"
 ]
+
 X = df[feature_cols]
-y = df["flood_occurrence"]
 
-# ------------------------------
-# 3. Time-based split
-# ------------------------------
-# Sort by time
-df_sorted = df.sort_values("time").reset_index(drop=True)
-split_idx = int(len(df_sorted) * 0.8)  # 80% train, 20% test chronologically
-
-X_train = df_sorted.loc[:split_idx, feature_cols]
-y_train = df_sorted.loc[:split_idx, "flood_occurrence"]
-X_test  = df_sorted.loc[split_idx+1:, feature_cols]
-y_test  = df_sorted.loc[split_idx+1:, "flood_occurrence"]
-
-print("Train size:", X_train.shape, "Test size:", X_test.shape)
+# Standardize features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
 # ==============================
-# Helper: evaluation + plots
+# 3. KMeans Clustering (Flood Risk Levels)
 # ==============================
-def evaluate_model(name, model, X_test, y_test, y_pred):
-    print(f"\n=== {name} ===")
-    print("Accuracy:", accuracy_score(y_test, y_pred))
-    print(classification_report(y_test, y_pred, digits=4))
+kmeans = KMeans(n_clusters=3, random_state=42)  # 3 clusters = Low, Medium, High risk
+df["flood_risk_cluster"] = kmeans.fit_predict(X_scaled)
 
-    # Confusion Matrix
-    cm = confusion_matrix(y_test, y_pred)
-    plt.figure(figsize=(5,4))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=["No Flood", "Flood"],
-                yticklabels=["No Flood", "Flood"])
-    plt.title(f"{name} - Confusion Matrix")
-    plt.ylabel("True Label")
-    plt.xlabel("Predicted Label")
-    plt.show()
+# Save model + scaler
+joblib.dump(kmeans, "models/flood_kmeans.pkl")
+joblib.dump(scaler, "models/flood_scaler.pkl")
 
-    # ROC Curve
-    if len(set(y_test)) == 2:
-        y_prob = model.predict_proba(X_test)[:,1]
-        fpr, tpr, _ = roc_curve(y_test, y_prob)
-        roc_auc = auc(fpr, tpr)
+print("✅ KMeans clustering complete. Risk clusters saved.")
 
-        plt.figure(figsize=(5,4))
-        plt.plot(fpr, tpr, color="blue", label=f"AUC = {roc_auc:.2f}")
-        plt.plot([0,1], [0,1], linestyle="--", color="gray")
-        plt.title(f"{name} - ROC Curve")
-        plt.xlabel("False Positive Rate")
-        plt.ylabel("True Positive Rate")
-        plt.legend()
-        plt.show()
+# Visualize cluster distribution
+plt.figure(figsize=(6,4))
+sns.countplot(x="flood_risk_cluster", data=df, palette="viridis")
+plt.title("Flood Risk Clusters (KMeans)")
+plt.xlabel("Cluster (0=Low, 1=Medium, 2=High)")
+plt.ylabel("Count")
+plt.show()
 
-# ------------------------------
-# 4. RandomForest
-# ------------------------------
-rf_clf = RandomForestClassifier(
-    n_estimators=200,
-    max_depth=10,
-    random_state=42,
-    class_weight="balanced"
-)
-rf_clf.fit(X_train, y_train)
-y_pred_rf = rf_clf.predict(X_test)
-evaluate_model("RandomForest", rf_clf, X_test, y_test, y_pred_rf)
-joblib.dump(rf_clf, "flood_rf_model.pkl")
+# ==============================
+# 4. Isolation Forest (Anomaly Detection)
+# ==============================
+iso = IsolationForest(contamination=0.05, random_state=42)  # top 5% as anomalies
+df["anomaly"] = iso.fit_predict(X_scaled)  # -1 = anomaly, 1 = normal
+df["anomaly_score"] = iso.decision_function(X_scaled)
+
+# Save anomaly model
+joblib.dump(iso, "models/flood_isolationforest.pkl")
+
+print("✅ IsolationForest anomaly detection complete.")
+
+# Visualize anomaly points over time
+plt.figure(figsize=(12,5))
+plt.plot(df["time"], df["precip"], label="Rainfall (mm)", color="blue")
+plt.scatter(df[df["anomaly"]==-1]["time"], df[df["anomaly"]==-1]["precip"],
+            color="red", label="Anomaly (Potential Flood)", marker="x")
+plt.title("Rainfall with Anomaly Detection")
+plt.xlabel("Time")
+plt.ylabel("Rainfall (mm)")
+plt.legend()
+plt.show()
 
 # ------------------------------
-# 5. XGBoost
+# 5. Save enhanced dataset
 # ------------------------------
-xgb_clf = xgb.XGBClassifier(
-    n_estimators=200,
-    max_depth=5,
-    learning_rate=0.1,
-    use_label_encoder=False,
-    eval_metric="logloss"
-)
-xgb_clf.fit(X_train, y_train)
-y_pred_xgb = xgb_clf.predict(X_test)
-evaluate_model("XGBoost", xgb_clf, X_test, y_test, y_pred_xgb)
-joblib.dump(xgb_clf, "flood_xgb_model.pkl")
-
-# ------------------------------
-# 6. MLP Classifier
-# ------------------------------
-mlp_clf = MLPClassifier(
-    hidden_layer_sizes=(64,32),
-    max_iter=500,
-    random_state=42
-)
-mlp_clf.fit(X_train, y_train)
-y_pred_mlp = mlp_clf.predict(X_test)
-evaluate_model("MLP Classifier", mlp_clf, X_test, y_test, y_pred_mlp)
-joblib.dump(mlp_clf, "flood_mlp_model.pkl")
-
-print("\n✅ Models trained & evaluated with TIME-BASED split")
+df.to_csv("../dataset/csv/angeles_barangay_risk.csv", index=False)
+print("✅ Enhanced dataset saved with flood_risk_cluster + anomaly columns")
