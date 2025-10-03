@@ -5,12 +5,14 @@ import joblib
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+from flask_cors import CORS
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 
+CORS(app)
 # Load models
 kmeans = joblib.load("../ai_training/models/flood_kmeans.pkl")
 iso = joblib.load("../ai_training/models/flood_isolationforest.pkl")
@@ -25,7 +27,7 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 # ------------------------------
 # Load barangay CSV
 # ------------------------------
-barangays_df = pd.read_csv("./csv/angeles_barangay_info.csv")  # Your CSV file
+barangays_df = pd.read_csv("./csv/angeles_barangay_info_corrected_full.csv")  # Your CSV file
 
 def get_weather(lat, lon):
     url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
