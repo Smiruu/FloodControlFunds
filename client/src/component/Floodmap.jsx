@@ -2,7 +2,7 @@ import React from "react";
 import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import useMapData from "../hooks/useMap"; // 👈 use the custom hook
+import useMapData from "../hooks/useMap";
 
 // Import marker icons (Vite compatible)
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -17,7 +17,7 @@ L.Icon.Default.mergeOptions({
 });
 
 const FloodMap = () => {
-  const data = useMapData(); // 👈 fetch + cache logic here
+  const data = useMapData();
 
   const riskColors = {
     Low: "green",
@@ -26,48 +26,67 @@ const FloodMap = () => {
   };
 
   return (
-    <div
-      style={{
-        border: "2px solid #ccc",
-        borderRadius: "12px",
-        overflow: "hidden",
-        width: "600px",
-        height: "400px",
-        margin: "0 auto",
-      }}
-    >
-      <MapContainer center={[15.15, 120.6]} zoom={12} style={{ height: "100vh", width: "100%" }}>
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="&copy; OpenStreetMap contributors"
-        />
-        {data.map((item, idx) => (
-          <React.Fragment key={idx}>
-            <Marker position={[item.lat, item.lon]}>
-              <Popup>
-                <strong>{item.barangay}</strong><br />
-                {item.message}<br />
-                Risk: {item.risk_label}<br />
-                Status: {item.anomaly_label}
-              </Popup>
-            </Marker>
-            <Circle
-              center={[item.lat, item.lon]}
-              radius={
-                item.risk_label === "High"
-                  ? 1000
-                  : item.risk_label === "Medium"
-                  ? 600
-                  : 300
-              }
-              pathOptions={{
-                color: riskColors[item.risk_label] || "blue",
-                fillOpacity: 0.3,
-              }}
-            />
-          </React.Fragment>
-        ))}
-      </MapContainer>
+    <div className="w-full h-full border-2 border-gray-300 rounded-xl overflow-hidden flex flex-col">
+      {/* Legend ABOVE the map */}
+      <div className="bg-white p-2 border-b flex justify-around items-center">
+        <strong>Legend:</strong>
+        <div className="flex items-center">
+          <span className="bg-green-500 w-4 h-4 rounded-full mr-2"></span>
+          Low Risk
+        </div>
+        <div className="flex items-center">
+          <span className="bg-orange-500 w-4 h-4 rounded-full mr-2"></span>
+          Medium Risk
+        </div>
+        <div className="flex items-center">
+          <span className="bg-red-500 w-4 h-4 rounded-full mr-2"></span>
+          High Risk
+        </div>
+      </div>
+
+      {/* Map fills remaining space */}
+      <div className="flex-1">
+        <MapContainer
+          center={[15.15, 120.6]}
+          zoom={13}
+          className="w-full h-full"
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution="&copy; OpenStreetMap contributors"
+          />
+
+          {data.map((item, idx) => (
+            <React.Fragment key={idx}>
+              <Marker position={[item.lat, item.lon]}>
+                <Popup>
+                  <strong>{item.barangay}</strong>
+                  <br />
+                  {item.message}
+                  <br />
+                  Risk: {item.risk_label}
+                  <br />
+                  Status: {item.anomaly_label}
+                </Popup>
+              </Marker>
+              <Circle
+                center={[item.lat, item.lon]}
+                radius={
+                  item.risk_label === "High"
+                    ? 1000
+                    : item.risk_label === "Medium"
+                    ? 600
+                    : 300
+                }
+                pathOptions={{
+                  color: riskColors[item.risk_label] || "blue",
+                  fillOpacity: 0.3,
+                }}
+              />
+            </React.Fragment>
+          ))}
+        </MapContainer>
+      </div>
     </div>
   );
 };
