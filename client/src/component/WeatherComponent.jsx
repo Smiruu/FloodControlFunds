@@ -1,49 +1,65 @@
 import React from "react";
-import useWeatherData from "../hooks/useWeatherData";
+import useMapData from "../hooks/useMap";
 
 function WeatherComponent() {
-  const { weatherData, loading } = useWeatherData();
+  const { data, loading } = useMapData();
 
   if (loading) {
     return (
       <div className="p-4 text-center text-gray-500">
-        Loading weather for barangays...
+        Loading weather and flood data for barangays...
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      {weatherData.map((barangay, idx) => (
-        <div
-          key={idx}
-          className="bg-white p-4 rounded-xl shadow-md w-full"
-        >
+      {data.map((barangay, idx) => (
+        <div key={idx} className="bg-white p-4 rounded-xl shadow-md w-full">
+          {/* Barangay name */}
           <div className="text-md font-bold mb-2 text-gray-800">
             {barangay.barangay}
           </div>
 
-          <div className="flex items-center space-x-4">
-            <img
-              src={`https://openweathermap.org/img/wn/${barangay.icon}@2x.png`}
-              alt={barangay.description}
-              className="w-12 h-12"
-            />
+          {/* Weather summary */}
+          <div className="flex items-center justify-between mb-2">
             <div>
-              <div className="text-xl font-bold">
-                {barangay.temp}°C
+              <div className="text-lg font-bold text-blue-600">
+                {barangay.temp_min}°C – {barangay.temp_max}°C
               </div>
-              <div className="capitalize text-gray-600">
-                {barangay.description}
+              <div className="text-gray-600 capitalize">
+                Precip: {barangay.precip} mm ({barangay.precip_prob}% chance)
               </div>
+            </div>
+            <div className="text-sm text-gray-500">
+              Risk:{" "}
+              <span
+                className={
+                  barangay.risk_label === "High"
+                    ? "text-red-600 font-semibold"
+                    : barangay.risk_label === "Medium"
+                    ? "text-orange-500 font-semibold"
+                    : "text-green-600 font-semibold"
+                }
+              >
+                {barangay.risk_label}
+              </span>
+              <br />
+              Status:{" "}
+              <span
+                className={
+                  barangay.anomaly_label === "Normal"
+                    ? "text-green-600 font-semibold"
+                    : "text-yellow-600 font-semibold"
+                }
+              >
+                {barangay.anomaly_label}
+              </span>
             </div>
           </div>
 
-          <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-700">
-            <div>
-              <span className="font-semibold">Feels like:</span>{" "}
-              {barangay.feels_like}°C
-            </div>
+          {/* Weather details */}
+          <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
             <div>
               <span className="font-semibold">Humidity:</span>{" "}
               {barangay.humidity}%
@@ -54,8 +70,17 @@ function WeatherComponent() {
             </div>
             <div>
               <span className="font-semibold">Wind:</span>{" "}
-              {barangay.wind} m/s
+              {barangay.windspeed} m/s
             </div>
+            <div>
+              <span className="font-semibold">River Discharge:</span>{" "}
+              {barangay.river_discharge}
+            </div>
+          </div>
+
+          {/* Message from the AI */}
+          <div className="mt-2 text-sm text-gray-600 italic">
+            {barangay.message}
           </div>
         </div>
       ))}

@@ -5,6 +5,7 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 import joblib
+import numpy as np
 
 # ------------------------------
 # 1. Load dataset
@@ -12,59 +13,74 @@ import joblib
 df = pd.read_csv("../dataset/csv/angeles_barangay_rainfall_discharge.csv", parse_dates=["time"])
 
 # ------------------------------
-# 2. Features & preprocessing
+# 2. Preprocessing
 # ------------------------------
 df["month"] = df["time"].dt.month
 df["day_of_year"] = df["time"].dt.dayofyear
 df["weekday"] = df["time"].dt.weekday
 df.fillna(0, inplace=True)
 
+# ------------------------------
+# 3. Feature weighting (emphasize rainfall & discharge)
+# ------------------------------
+df["precip_weighted"] = df["precip"] * 3          # Strongly influence rainfall
+df["river_discharge_weighted"] = df["river_discharge"] * 2
+df["precip_3d_sum_weighted"] = df["precip_3d_sum"] * 2
+df["precip_7d_sum_weighted"] = df["precip_7d_sum"] * 2
+
 feature_cols = [
-    "precip", "river_discharge",
+    "precip_weighted", "river_discharge_weighted",
     "precip_lag1", "precip_lag2",
-    "precip_3d_sum", "precip_7d_sum",
+    "precip_3d_sum_weighted", "precip_7d_sum_weighted",
     "month", "day_of_year", "weekday"
 ]
 
 X = df[feature_cols]
 
-# Standardize features
+# ------------------------------
+# 4. Standardize
+# ------------------------------
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# ==============================
-# 3. KMeans Clustering (Flood Risk Levels)
-# ==============================
-kmeans = KMeans(n_clusters=3, random_state=42)  # 3 clusters = Low, Medium, High risk
+# ------------------------------
+# 5. KMeans with smarter initialization
+# ------------------------------
+# We'll use "k-means++" init for better centroid separation
+kmeans = KMeans(n_clusters=3, init="k-means++", random_state=42)
 df["flood_risk_cluster"] = kmeans.fit_predict(X_scaled)
+
+# Assign readable labels by comparing cluster means
+cluster_means = df.groupby("flood_risk_cluster")[["precip", "river_discharge"]].mean().sort_values("precip")
+risk_labels = {cluster: label for cluster, label in zip(cluster_means.index, ["Low", "Medium", "High"])}
+df["risk_label"] = df["flood_risk_cluster"].map(risk_labels)
 
 # Save model + scaler
 joblib.dump(kmeans, "models/flood_kmeans.pkl")
 joblib.dump(scaler, "models/flood_scaler.pkl")
 
-print("✅ KMeans clustering complete. Risk clusters saved.")
+print("✅ KMeans clustering complete with clearer separation.")
 
-# Visualize cluster distribution
+# Visualize
 plt.figure(figsize=(6,4))
-sns.countplot(x="flood_risk_cluster", data=df, palette="viridis")
+sns.countplot(x="risk_label", data=df, palette="viridis", order=["Low", "Medium", "High"])
 plt.title("Flood Risk Clusters (KMeans)")
-plt.xlabel("Cluster (0=Low, 1=Medium, 2=High)")
+plt.xlabel("Risk Level")
 plt.ylabel("Count")
 plt.show()
 
-# ==============================
-# 4. Isolation Forest (Anomaly Detection)
-# ==============================
-iso = IsolationForest(contamination=0.05, random_state=42)  # top 5% as anomalies
-df["anomaly"] = iso.fit_predict(X_scaled)  # -1 = anomaly, 1 = normal
+# ------------------------------
+# 6. Isolation Forest (Anomalies)
+# ------------------------------
+iso = IsolationForest(contamination=0.05, random_state=42)
+df["anomaly"] = iso.fit_predict(X_scaled)
 df["anomaly_score"] = iso.decision_function(X_scaled)
 
-# Save anomaly model
 joblib.dump(iso, "models/flood_isolationforest.pkl")
 
 print("✅ IsolationForest anomaly detection complete.")
 
-# Visualize anomaly points over time
+# Visualize anomalies
 plt.figure(figsize=(12,5))
 plt.plot(df["time"], df["precip"], label="Rainfall (mm)", color="blue")
 plt.scatter(df[df["anomaly"]==-1]["time"], df[df["anomaly"]==-1]["precip"],
@@ -76,7 +92,7 @@ plt.legend()
 plt.show()
 
 # ------------------------------
-# 5. Save enhanced dataset
+# 7. Save enhanced dataset
 # ------------------------------
 df.to_csv("../dataset/csv/angeles_barangay_risk.csv", index=False)
-print("✅ Enhanced dataset saved with flood_risk_cluster + anomaly columns")
+print("✅ Enhanced dataset saved with risk_label + anomaly columns")
