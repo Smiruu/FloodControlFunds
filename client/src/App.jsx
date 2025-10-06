@@ -4,15 +4,22 @@ import "./index.css";
 import FloodMap from "./component/Floodmap";
 
 function App() {
-  const [count, setCount] = useState(0);
+
 
   return (
     <>
       <div className="h-screen flex flex-col bg-gray-100">
         {/* Header */}
-        <div className="bg-white p-2 rounded-xl shadow-lg m-4">
-          <p className="text-lg font-bold text-gray-800">Flood Alert</p>
-        </div>
+<div className="bg-white p-4 rounded-xl shadow-lg m-4 text-center">
+  <h1 className="text-2xl font-extrabold">
+    <span className="text-orange-500">Flood</span>
+    <span className="text-black">Sight</span>
+  </h1>
+  <p className="text-sm text-gray-600 font-medium mt-1">
+    Here To Serve
+  </p>
+</div>
+
 
         {/* Main content fills rest of screen */}
         <div className="grid grid-cols-5 gap-6 m-4 flex-1 overflow-hidden">

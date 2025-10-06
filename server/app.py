@@ -22,7 +22,7 @@ CORS(app)
 # ------------------------------
 # Load models & scaler
 # ------------------------------
-MODEL_DIR = "../ai_training/models"
+MODEL_DIR = "./models"
 kmeans = joblib.load(os.path.join(MODEL_DIR, "flood_kmeans.pkl"))
 iso = joblib.load(os.path.join(MODEL_DIR, "flood_isolationforest.pkl"))
 scaler = joblib.load(os.path.join(MODEL_DIR, "flood_scaler.pkl"))
