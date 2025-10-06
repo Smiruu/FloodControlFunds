@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 
 const STORAGE_KEY = "floodData";
+const API_URL = import.meta.env.VITE_API_URL; // ✅ from env file
 
 export default function useMapData() {
   const [data, setData] = useState([]);
@@ -17,7 +18,6 @@ export default function useMapData() {
         const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
         const cached = localStorage.getItem(STORAGE_KEY);
 
-        // ✅ Use cache if same date
         if (cached) {
           const parsed = JSON.parse(cached);
           if (parsed.date === today) {
@@ -27,11 +27,9 @@ export default function useMapData() {
           }
         }
 
-        // ✅ Otherwise fetch fresh data
-        const res = await axios.get("http://127.0.0.1:5000/predict_all");
+        const res = await axios.get(`${API_URL}/predict_all`);
         setData(res.data);
 
-        // ✅ Save new data to localStorage
         localStorage.setItem(
           STORAGE_KEY,
           JSON.stringify({ date: today, data: res.data })
