@@ -26,21 +26,22 @@ const FloodMap = () => {
   };
 
   return (
-    <div className="w-full h-full border-2 border-gray-300 rounded-xl overflow-hidden flex flex-col">
+   <div className="w-full h-[400px] lg:h-full border-2 border-gray-300 rounded-xl overflow-hidden flex flex-col">
+
       {/* Legend ABOVE the map */}
-      <div className="bg-white p-2 border-b flex justify-around items-center">
-        <strong>Legend:</strong>
-        <div className="flex items-center">
-          <span className="bg-green-500 w-4 h-4 rounded-full mr-2"></span>
-          Low Risk
+      <div className="bg-white p-2 border-b flex justify-around items-center flex-wrap text-sm">
+        <strong className="mr-2">Legend:</strong>
+        <div className="flex items-center mr-2">
+          <span className="bg-green-500 w-4 h-4 rounded-full mr-1"></span>
+          Low
+        </div>
+        <div className="flex items-center mr-2">
+          <span className="bg-orange-500 w-4 h-4 rounded-full mr-1"></span>
+          Medium
         </div>
         <div className="flex items-center">
-          <span className="bg-orange-500 w-4 h-4 rounded-full mr-2"></span>
-          Medium Risk
-        </div>
-        <div className="flex items-center">
-          <span className="bg-red-500 w-4 h-4 rounded-full mr-2"></span>
-          High Risk
+          <span className="bg-red-500 w-4 h-4 rounded-full mr-1"></span>
+          High
         </div>
       </div>
 
@@ -59,7 +60,7 @@ const FloodMap = () => {
 
       {/* Map */}
       {!loading && !error && (
-        <div className="flex-1">
+        <div className="flex-1 min-h-[300px] md:min-h-0"> {/* 👈 Keeps map visible on mobile */}
           <MapContainer
             center={[15.15, 120.6]}
             zoom={13}
