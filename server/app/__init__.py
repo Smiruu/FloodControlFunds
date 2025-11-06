@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
-
+import os
 load_dotenv()
 
 def create_app(config_class='config.Config'):
