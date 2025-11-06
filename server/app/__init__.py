@@ -11,6 +11,7 @@ def create_app(config_class='config.Config'):
     app.config.from_object(config_class)
 
     frontend_url = os.getenv("FRONTEND_URL")
+    print(frontend_url)
 
     CORS(app, 
          origins=[frontend_url] 
