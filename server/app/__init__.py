@@ -10,7 +10,11 @@ def create_app(config_class='config.Config'):
 
     app.config.from_object(config_class)
 
-    CORS(app)
+    frontend_url = os.getenv("FRONTEND_URL")
+
+    CORS(app, 
+         origins=[frontend_url] 
+    )
 
     with app.app_context():
         
