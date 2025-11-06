@@ -12,11 +12,11 @@ def get_barangays():
     # Get the DF from the app config where it was loaded
     return current_app.config['BARANGAYS_DF']
 
-def run_prediction(weather_data: dict) -> dict:
+def run_prediction_batch(weather_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Runs the ML prediction on a single row of weather data.
+    Runs the ML prediction on a BATCH of weather data.
     """
-    # --- 1. Get pre-loaded models from app config ---
+    # 1. Get pre-loaded models from app config
     kmeans = current_app.config['KMEANS_MODEL']
     iso = current_app.config['ISO_MODEL']
     scaler = current_app.config['SCALER']
@@ -24,41 +24,29 @@ def run_prediction(weather_data: dict) -> dict:
     risk_map = current_app.config['RISK_MAP']
     
     if not all([kmeans, iso, scaler]):
-        print("--- [ERROR] Prediction called, but models are not loaded. ---")
-        return {"error": "Models not loaded. Check server logs."}
+        raise Exception("Models are not loaded. Check server logs.")
         
-    # --- 2. Feature Engineering ---
-    df = pd.DataFrame([weather_data])
+    # --- 2. Feature Engineering (on the whole DataFrame) ---
+    # Make a copy to avoid warnings
+    df = weather_df.copy() 
     
     # Convert 'time' string from JSON to datetime object
-    try:
-        df['time'] = pd.to_datetime(df['time'])
-    except Exception as e:
-        print(f"--- [ERROR] Could not convert 'time' column to datetime: {e} ---")
-        return {"error": "Invalid time format in weather_data"}
+    df['time'] = pd.to_datetime(df['time'])
 
+    # These operations are now vectorized (super fast)
     df["precip_lag1"] = df["precip"]
     df["precip_lag2"] = df["precip"]
     df["month"] = df["time"].dt.month
     df["day_of_year"] = df["time"].dt.dayofyear
     df["weekday"] = df["time"].dt.weekday
 
-    # Define the features our model expects
     X_input = df[
         [
-            "precip",
-            "river_discharge",
-            "precip_lag1",
-            "precip_lag2",
-            "precip_3d_sum",
-            "precip_7d_sum",
-            "month",
-            "day_of_year",
-            "weekday",
+            "precip", "river_discharge", "precip_lag1", "precip_lag2",
+            "precip_3d_sum", "precip_7d_sum", "month", "day_of_year", "weekday",
         ]
     ]
     
-    # Rename columns to match what the scaler/model was trained on
     X_input = X_input.rename(columns={
         "precip": "precip_weighted",
         "precip_3d_sum": "precip_3d_sum_weighted",
@@ -66,25 +54,23 @@ def run_prediction(weather_data: dict) -> dict:
         "river_discharge": "river_discharge_weighted",
     })
 
-    # --- 3. Scaling ---
-    try:
-        X_scaled = scaler.transform(X_input)
-    except Exception as e:
-        print(f"--- [ERROR] Scaling failed: {e} ---")
-        return {"error": f"Scaling failed: {e}. Check input data."}
+    # --- 3. Scaling (on the whole batch) ---
+    X_scaled = scaler.transform(X_input)
 
-    # --- 4. Prediction ---
-    cluster = int(kmeans.predict(X_scaled)[0])
-    anomaly = int(iso.predict(X_scaled)[0])
+    # --- 4. Prediction (on the whole batch) ---
+    clusters = kmeans.predict(X_scaled)
+    anomalies = iso.predict(X_scaled)
 
-    # --- 5. Mapping Labels ---
-    anomaly_label = anomaly_map.get(anomaly, "Unknown")
-    risk_label = risk_map.get(cluster, "Unknown")
-
-    return {
-        "risk_cluster": cluster,
-        "risk_label": risk_label,
-        "anomaly": anomaly,
-        "anomaly_label": anomaly_label,
-        "message": f"Current flood status: {anomaly_label}. Risk level: {risk_label}."
-    }
+    # --- 5. Mapping Labels (vectorized) ---
+    results_df = pd.DataFrame({
+        'risk_cluster': clusters,
+        'anomaly': anomalies
+    })
+    
+    results_df['risk_label'] = results_df['risk_cluster'].map(risk_map)
+    results_df['anomaly_label'] = results_df['anomaly'].map(anomaly_map)
+    
+    # Fill any missing labels
+    results_df.fillna("Unknown", inplace=True)
+    
+    return results_df
